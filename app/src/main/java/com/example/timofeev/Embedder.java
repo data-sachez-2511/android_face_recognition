@@ -79,10 +79,10 @@ public class Embedder {
 
     float[] forward(Mat face){
         Imgproc.resize(face, face, new Size(model_size, model_size));
-        Log.i(tag, "Input face size: " + face.size().toString());
+//        Log.i(tag, "Input face size: " + face.size().toString());
         Tensor input = TensorUtils.to_tensor(face, mean, std);
         Tensor output_tensor = model.forward(IValue.from(input)).toTensor();
-        Log.i(tag, "Output tensor desc: " + output_tensor.toString());
+//        Log.i(tag, "Output tensor desc: " + output_tensor.toString());
         return output_tensor.getDataAsFloatArray();
     }
 }

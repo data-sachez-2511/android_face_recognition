@@ -1,6 +1,7 @@
 package com.example.timofeev;
 
 
+import android.annotation.SuppressLint;
 import android.app.FragmentManager;
 import android.app.FragmentTransaction;
 import android.content.Context;
@@ -8,6 +9,7 @@ import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
+import android.database.Cursor;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Color;
@@ -17,6 +19,7 @@ import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import androidx.fragment.app.FragmentActivity;
 
+import android.provider.MediaStore;
 import android.view.View;
 import android.util.Log;
 import android.widget.ImageButton;
@@ -26,6 +29,9 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 
+import org.opencv.android.BaseLoaderCallback;
+import org.opencv.android.LoaderCallbackInterface;
+import org.opencv.android.OpenCVLoader;
 import org.pytorch.Module;
 
 import java.io.File;
@@ -35,9 +41,6 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.*;
 
-/**
- * Created by avsavchenko.
- */
 
 public class MainActivity extends FragmentActivity {
 
@@ -49,8 +52,8 @@ public class MainActivity extends FragmentActivity {
     private TextView progressBarinsideText;
 
     private Thread photoProcessingThread=null;
-    private Map<String,Long> photosTaken;
     private ArrayList<String> photosFilenames;
+    private HashMap<String, Integer> imageClusters;
     private int currentPhotoIndex=0;
     private Pipe pipe;
     private Cluster cluster = new Cluster();
@@ -60,6 +63,7 @@ public class MainActivity extends FragmentActivity {
 
     private List<Map<String,Map<String, Set<String>>>> categoriesHistograms=new ArrayList<>();
     private List<Map<String, Map<String, Set<String>>>> eventTimePeriod2Files=new ArrayList<>();
+
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -108,22 +112,24 @@ public class MainActivity extends FragmentActivity {
         }
     }
 
-    private void addDayEvent(List<Map<String, Map<String, Set<String>>>> eventTimePeriod2Files, String category, String timePeriod, Set<String> filenames){
-        int highLevelCategory=getHighLevelCategory(category);
-        if(highLevelCategory>=0) {
-            Map<String,Map<String,Set<String>>> histo=eventTimePeriod2Files.get(highLevelCategory);
-            if(!histo.containsKey(category))
-                histo.put(category,new TreeMap<>(Collections.reverseOrder()));
-            histo.get(category).put(timePeriod,filenames);
-
-            //Log.d(TAG,"EVENTS!!! "+timePeriod+":"+category+" ("+highLevelCategory+"), "+filenames.size());
-        }
-    }
+//    private void addDayEvent(List<Map<String, Map<String, Set<String>>>> eventTimePeriod2Files, String category, String timePeriod, Set<String> filenames){
+//        int highLevelCategory=getHighLevelCategory(category);
+//        if(highLevelCategory>=0) {
+//            Map<String,Map<String,Set<String>>> histo=eventTimePeriod2Files.get(highLevelCategory);
+//            if(!histo.containsKey(category))
+//                histo.put(category,new TreeMap<>(Collections.reverseOrder()));
+//            histo.get(category).put(timePeriod,filenames);
+//
+//            //Log.d(TAG,"EVENTS!!! "+timePeriod+":"+category+" ("+highLevelCategory+"), "+filenames.size());
+//        }
+//    }
 
     private void init(){
         //checkServerSettings();
-        photosTaken = photoProcessor.getCameraImages();
-        photosFilenames=new ArrayList<String>(photosTaken.keySet());
+        photosFilenames = (ArrayList<String>) getImagePaths(this);
+        imageClusters = new HashMap<>();
+//        photosFilenames=new ArrayList<String>(photosTaken.keySet());
+        Log.i(TAG, "photos: " + photosFilenames.toString());
         currentPhotoIndex=0;
 
         progressBar=(ProgressBar) findViewById(R.id.progress);
@@ -149,20 +155,22 @@ public class MainActivity extends FragmentActivity {
             return eventTimePeriod2Files;
     }
 
-    private void processAllPhotos(){
+    private void processAllPhotos() {
         //ImageAnalysisResults previousPhotoProcessedResult=null;
-        for(;currentPhotoIndex<photosTaken.size();++currentPhotoIndex){
-            String filename=photosFilenames.get(currentPhotoIndex);
+        for (; currentPhotoIndex < photosFilenames.size(); ++currentPhotoIndex) {
+            String filename = photosFilenames.get(currentPhotoIndex);
             try {
                 File file = new File(filename);
 
                 if (file.exists()) {
                     long startTime = SystemClock.uptimeMillis();
                     Bitmap myBitmap = BitmapFactory.decodeFile(file.getAbsolutePath());
-                    Vector<float[]> embeds = new Vector<>();
-                    for(float[] embed: embeds){
+                    Vector<float[]> embeds = pipe.pipe(myBitmap);
+                    for (float[] embed : embeds) {
                         int id = cluster.add(embed);
-                        if(idx_map.containsKey(currentPhotoIndex)){
+                        imageClusters.put(filename, id);
+                        Log.i(TAG, "CLUSTERS" + imageClusters.toString());
+                        if (idx_map.containsKey(currentPhotoIndex)) {
                             Objects.requireNonNull(idx_map.get(currentPhotoIndex)).add(id);
                         } else {
                             idx_map.put(currentPhotoIndex, new Vector<Integer>());
@@ -170,14 +178,14 @@ public class MainActivity extends FragmentActivity {
                     }
 
                     long endTime = SystemClock.uptimeMillis();
-                    Log.d(TAG, "!!Processed: "+ filename+" in background thread:" + Long.toString(endTime - startTime));
-                    final int progress=currentPhotoIndex+1;
+                    Log.d(TAG, "!!Processed: " + filename + " in background thread:" + Long.toString(endTime - startTime));
+                    final int progress = currentPhotoIndex + 1;
                     runOnUiThread(new Runnable() {
                         @Override
                         public void run() {
                             if (progressBar != null) {
                                 progressBar.setProgress(progress);
-                                progressBarinsideText.setText("" + 100 * progress / photosTaken.size() + "%");
+                                progressBarinsideText.setText("" + 100 * progress / photosFilenames.size() + "%");
                             }
                         }
                     });
@@ -188,6 +196,42 @@ public class MainActivity extends FragmentActivity {
             }
         }
     }
+
+    @Override
+    public void onResume()
+    {
+        super.onResume();
+        if (!OpenCVLoader.initDebug()) {
+            Log.d(TAG, "Internal OpenCV library not found. Using OpenCV Manager for initialization");
+            OpenCVLoader.initAsync(OpenCVLoader.OPENCV_VERSION_3_4_0, this, mLoaderCallback);
+        } else {
+            Log.d(TAG, "OpenCV library found inside package. Using it!");
+            mLoaderCallback.onManagerConnected(LoaderCallbackInterface.SUCCESS);
+        }
+    }
+
+    private BaseLoaderCallback mLoaderCallback = new BaseLoaderCallback(this) {
+        @Override
+        public void onManagerConnected(int status) {
+            switch (status) {
+                case LoaderCallbackInterface.SUCCESS:
+                {
+                    Log.i(TAG, "OpenCV loaded successfully");
+                    Log.i(TAG, "After loading all libraries" );
+                    Toast.makeText(getApplicationContext(),
+                            "OpenCV loaded successfully",
+                            Toast.LENGTH_SHORT).show();
+                } break;
+                default:
+                {
+                    super.onManagerConnected(status);
+                    Toast.makeText(getApplicationContext(),
+                            "OpenCV error",
+                            Toast.LENGTH_SHORT).show();
+                } break;
+            }
+        }
+    };
 
     private String[] getRequiredPermissions() {
         try {
@@ -204,6 +248,7 @@ public class MainActivity extends FragmentActivity {
             return new String[0];
         }
     }
+
     private boolean allPermissionsGranted() {
         for (String permission : getRequiredPermissions()) {
             int status=ContextCompat.checkSelfPermission(this,permission);
@@ -245,5 +290,29 @@ public class MainActivity extends FragmentActivity {
             default:
                 super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         }
+    }
+
+    public List<String> getImagePaths(Context context) {
+        final String[] projection = {MediaStore.Images.Media.DATA, MediaStore.Images.Media.DATE_TAKEN};
+        //String path= Environment.getExternalStorageDirectory().toString();//+"/DCIM/Camera";
+        final String selection = null;//MediaStore.Images.Media.BUCKET_ID +" = ?";
+        final String[] selectionArgs = null;//{String.valueOf(path.toLowerCase().hashCode())};
+        ArrayList<String> result = new ArrayList<>();
+        try {
+            @SuppressLint("Recycle") final Cursor cursor = context.getContentResolver().query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, projection, selection, selectionArgs, MediaStore.Images.ImageColumns.DATE_TAKEN + " DESC");
+            if (cursor.moveToFirst()) {
+                int dataColumn = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATA);
+                int dateColumn = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATE_TAKEN);
+                do {
+                    String data = cursor.getString(dataColumn);
+                    result.add(data);
+                }
+                while (cursor.moveToNext());
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            Log.e(TAG, "Exception thrown: " + e);
+        }
+        return result;
     }
 }

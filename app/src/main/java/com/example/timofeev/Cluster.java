@@ -43,6 +43,23 @@ public class Cluster {
         }
     }
 
+    public int get(float[] v){
+        Vector<Float> dists = new Vector<>();
+        float min_dist = 2.0f;
+        int min_idx = -1;
+        float[] norm_vec_ = norm_vec(v);
+        for(int i=0;i<centers.size();i++){
+            if(dist(norm_vec_, centers.get(i).second) < min_dist) {
+                min_dist = dist(norm_vec_, centers.get(i).second);
+                min_idx = i;
+            }
+        }
+        if(min_idx == -1){
+            return -1;
+        }
+        return centers.get(min_idx).first;
+    }
+
     private float dist(float[] v1, float[] v2){
         float sum = 0;
         for(int i=0;i<v1.length;i++)

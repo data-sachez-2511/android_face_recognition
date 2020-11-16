@@ -95,8 +95,8 @@ public class Detector {
 
     private Mat preprocessing(Mat m) {
 
-        Log.i(tag, "input image size: " + m.toString());
-        Log.i(tag, "input image: " + m.toString());
+//        Log.i(tag, "input image size: " + m.toString());
+//        Log.i(tag, "input image: " + m.toString());
         int h = m.rows();
         int w = m.cols();
         int c = m.channels();
@@ -112,12 +112,12 @@ public class Detector {
             w = (int) (w * scale_);
             Imgproc.resize(m, m, new Size(w, h));
         }
-        Log.i(tag, "scale: " + String.valueOf(scale_));
-        Log.i(tag, "resized image size: " + m.size().toString());
+//        Log.i(tag, "scale: " + String.valueOf(scale_));
+//        Log.i(tag, "resized image size: " + m.size().toString());
         int numChannels = m.channels();
         int frameSize = m.rows() * m.cols();
         byte[] temp = new byte[numChannels];
-        Log.i(tag, "numChannels: " + String.valueOf(numChannels));
+//        Log.i(tag, "numChannels: " + String.valueOf(numChannels));
         Mat ret_mat = new Mat(model_size, model_size, CvType.CV_8UC3, Scalar.all(0));
         for (int i = 0; i < m.cols(); i++) {
             for (int j = 0; j < m.rows(); j++) {
@@ -128,7 +128,7 @@ public class Detector {
 //                Log.i(tag, "input " + i + ", " + j + ", " + 0 + ": " + temp[2]);
             }
         }
-        Log.i(tag, "preprocessing image size: " + ret_mat.size().toString());
+//        Log.i(tag, "preprocessing image size: " + ret_mat.size().toString());
         return ret_mat;
     }
 
@@ -140,29 +140,29 @@ public class Detector {
             loc.add(Arrays.copyOfRange(tensor, i, i + 4));
             scores.add(tensor[i + 5]);
         }
-        Log.i(tag, "postprocessing loc size: " + loc.size());
-        Log.i(tag, "postprocessing scores size: " + scores.size());
-        Log.i(tag, "postprocessing scores max: " + Collections.max(scores));
+//        Log.i(tag, "postprocessing loc size: " + loc.size());
+//        Log.i(tag, "postprocessing scores size: " + scores.size());
+//        Log.i(tag, "postprocessing scores max: " + Collections.max(scores));
         ArrayList<Float> string_shape = new ArrayList<>();
         for (float a : loc.get(0)) {
             string_shape.add(a);
         }
-        Log.i(tag, "loc[0]: " + string_shape.toString());
-        Log.i(tag, "scores: " + scores.toString());
+//        Log.i(tag, "loc[0]: " + string_shape.toString());
+//        Log.i(tag, "scores: " + scores.toString());
         Vector<float[]> boxes = decode_batch(loc);
         string_shape = new ArrayList<>();
         for (float a : boxes.get(0)) {
             string_shape.add(a);
         }
-        Log.i(tag, "boxes[0]: " + string_shape.toString());
-        Log.i(tag, "postprocessing boxes size: " + boxes.size());
+//        Log.i(tag, "boxes[0]: " + string_shape.toString());
+//        Log.i(tag, "postprocessing boxes size: " + boxes.size());
 
         Vector<Integer> idxs = new Vector<>();
         for(int i=0;i<scores.size();i++){
             if(scores.get(i) > confidence_threshold)
                 idxs.add(i);
         }
-        Log.i(tag, "postprocessing idxs: " + idxs.toString());
+//        Log.i(tag, "postprocessing idxs: " + idxs.toString());
 
         Vector<float[]> scored_dets = new Vector<>();
         for(int i=0;i<idxs.size();i++){
@@ -280,9 +280,9 @@ public class Detector {
         int y1 = (int)det[1];
         int x2 = (int)det[2];
         int y2 = (int)det[3];
-        Log.i(tag, "main image: " + image.toString());
+//        Log.i(tag, "main image: " + image.toString());
         Rect rectCrop = new Rect(x1, y1, x2 - x1 + 1, y2 - y1 + 1);
-        Log.i(tag, "rectCrop: " + rectCrop.toString());
+//        Log.i(tag, "rectCrop: " + rectCrop.toString());
 
         Mat face = image.submat(rectCrop);
         Imgproc.cvtColor(face, face, Imgproc.COLOR_BGR2RGB);
